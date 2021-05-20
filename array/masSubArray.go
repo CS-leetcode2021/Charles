@@ -21,6 +21,7 @@ func maxSubArray(nums []int) int {
 	return max
 }
 
+// error
 func max(nums []int) int {
 	res := nums[0]
 
