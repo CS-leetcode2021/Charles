@@ -14,7 +14,6 @@ import (
 
 /*
  *  @Description:   暴力解会超时，O（n3）的时间复杂度
- * 	@ 	1、
  *  @Param:         
  *  @Return:        
  */
