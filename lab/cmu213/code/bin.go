@@ -4,10 +4,10 @@ import "fmt"
 
 
 func main()  {
-	a := -10
+	a := 0.5
 	fmt.Printf("%b",a)
-	b:=a<<1
+
 	fmt.Println()
-	fmt.Printf("%b",b)
-	fmt.Println()
+	// fmt.Printf("%b",b)
+	// fmt.Println()
 }
