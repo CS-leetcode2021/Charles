@@ -54,7 +54,7 @@ int count(TreeNode root) {
 }
 ```
 
--   [实践_翻转二叉树](./invertTree.go)
+-   [实践_翻转二叉树](invertTree.go)
 
 ---
 ### 二叉树的四种遍历框架
