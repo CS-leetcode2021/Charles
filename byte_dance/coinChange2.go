@@ -1,4 +1,4 @@
-package byte_dance
+package main
 
 /**
  *  @ClassName:coinChange2.go
