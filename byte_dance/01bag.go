@@ -42,7 +42,7 @@ func main01()  {
 }
 
 func main()  {
-	N , V := 0,0
+	N , V := 0,0	// N个物体，容量为V的背包
 	fmt.Scanln(&N,&V)
 
 	v := make([]int,N+1)

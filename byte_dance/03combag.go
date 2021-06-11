@@ -26,7 +26,7 @@ func main()  {
 	for i := 1; i <=N; i++ {
 		fmt.Scanln(&v[i],&w[i])
 	}
-	res := bagCom(N,V,v,w)
+	res := bagCom2(N,V,v,w)
 	fmt.Println(res)
 }
 
@@ -44,4 +44,24 @@ func bagCom(num int , cap int , vol []int , worth []int) int {
 	return dp[cap]
 
 
+}
+
+func bagCom2(num int, cap int, vol []int, worth []int) int {
+	dp := make([][]int,num+1)
+
+	for i := 0; i <= num; i++ {
+		dp[i] = make([]int,cap+1)
+	}
+
+
+	for i := 1; i <= num ; i++ {
+		for j := 1; j <= cap; j++ {
+			dp[i][j] = dp[i-1][j]
+			if j >= vol[i] {
+				dp[i][j] = int(math.Max(float64(dp[i-1][j]),float64(dp[i][j-vol[i]]+worth[i])))
+			}
+		}
+	}
+
+	return dp[num][cap]
 }
