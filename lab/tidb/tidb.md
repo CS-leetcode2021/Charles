@@ -42,9 +42,61 @@ tidb也可以通过监控API来查看集群的状态
 4、实验配置
 ![](./photo/2133.png)
 
+----
 
 # tidb业务数据同步、迁移和备份
 
+---
 
+1、需求、场景介绍
+
+    系统重构、数据库设计不合理、业务不断增长
+
+2、数据备份
+
+3、数据迁移工具—Dumpling
+    
+    该工具可以吧存储在TiDB/Mysql中的数据导出为SQL或者CSV格式，可以用于完成逻辑上的全量备份或者导出
+
+4、数据迁移工具-Lighting
+
+    大量新数据的快速导入、全量备份数据的恢复
+![](./photo/2601.png)
+
+5、备份流程--BR（backup/restore）
+    
+    1、根据从PD获取的TiKV信息，向TiKV节点发送备份请求
+    2、TiKV收到备份请求后，遍历节点上所有的Region leader，通过生成相应的时间点的版本数据存储生成SST文件
+    3、备份完成后，在备份目录下生成SST文件（备份数据信息）和backupmeta文件（元数据信息）
+
+    恢复：
+    1、根据聚合表解析SST文件
+    2、区域根据SST文件的关键范围进行预细分，因此每个区域至少对应一个SST文件
+    3、遍历每个表以恢复该表和相应的SST文件
+    4、查找与文件对定的区域，将下载文件的请求发送到相应的TiKV节点，并在成功下载后发送加载请求
+
+
+---
 
 # tidb系统表和常规表的操作
+
+---
+
+1、连接TiDB
+
+
+2、SQL的基本操作
+
+    DDL、DML、DQL、DCL
+
+    DDL：drop、create、alter
+    DML：insert、update、delete
+    DQL：select
+    DCL：commit、rollback
+
+
+3、TiDB系统表介绍
+
+![](./photo/2602.png)
+
+    
