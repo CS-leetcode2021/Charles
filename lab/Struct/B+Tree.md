@@ -3,13 +3,13 @@
 ---
 [参考1-Innodb的大小计算](https://www.cnblogs.com/leefreeman/p/8315844.html)
 [参考2-mysql-page大小](https://zhuanlan.zhihu.com/p/334684710)
-[参考3-InnoDB的数据结构](https://segmentfault.com/a/1190000019321380)
+[参考3-InnoDB的数据结构-数据页组织](https://segmentfault.com/a/1190000019321380)
 
 [参考4-B+树索引](https://www.cnblogs.com/GrimMjx/p/10540263.html)
 [参考5-辅助索引与主键索引](http://blog.codinglabs.org/articles/theory-of-mysql-index.html)
 [参考6-复合/联合索引](https://www.jianshu.com/p/35588ecf33c1)
 
-innnodb支持一下索引：
+Innodb支持以下索引：
     
     B+树索引、全文索引、哈希索引
 
@@ -62,4 +62,26 @@ innnodb支持一下索引：
     =21902400条数据，已经是千万级别的数据存储，所以一般来说高度3就够用了。
 
     
+4、Innodb数据页是如何组织的？
+    
+    数据库数据是存在磁盘中的，不过真正处理数据是在内存中进行的，这就需要从磁盘上不断地把数据读到内存中，由于内存和磁盘速度差
+    几个数量级级别，所以为了避免频繁的数据交互带来的问题，mysql一次会多读取一些，是多少呢？
+    读一页。一页有16kb，（这里就是按照Innodb的文件组织形式规定的大小，为16k）也就是说一次读取一般都是16kb的倍数。
+    `页是磁盘内存交互的基本单位`
 
+    一条记录称为：数据行。Innodb中有四种不同类型的数据行，Compact、Redundant、Dynamic、Compressed
+    
+![](https://img-blog.csdnimg.cn/20190528203300922.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzE5MDA2MjIz,size_16,color_FFFFFF,t_70)
+
+    一张数据页内部结构，一个16kb的页，内部放着很多行，比如3条记录，除此之外，内部存放着两个特殊的记录，最大记录和最小记录
+    
+    数据页内部记录是以单链表的形式存放的，头围分别是那两个特殊的记录，在内存中有很多页，页和页之间是用双链表连接的
+5、B+索引扩充：
+
+![](https://img-blog.csdnimg.cn/20190528204709166.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzE5MDA2MjIz,size_16,color_FFFFFF,t_70)
+        
+    一般为了检索的快一点，我们主键都是自动生成的，所以最下面那层是根据id排序生成的，最下面那层的叶子节点是真实的数据。
+    有4页，每页里面有一个单链表，就是我们的真实数据行。第二行有两页，每页中也是有个数据行构成的单链表，这是的数据行只
+    包含了页码（最底下那层某页）、某页最大id，由此可见，第二行比最底下那行页数少了很多很多。就这样，一层一层的抽取，一
+    定会有一个所谓的跟页。我们搜索数据就是从跟页开始的，一层一层往下找的。由于一个数据页可以存放16KB数据，所以三四层的
+    树状图就已经能存放很多很多数据了，所以不要担心树会很深。再强调一下，页内是单链表，同层的页和页之间是双链表。
