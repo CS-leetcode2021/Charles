@@ -164,3 +164,132 @@
     就不会很低了，因为并不会将日志从头到尾执行一遍，而仅仅是 checkpoint 到尾执行一遍。另一面，checkpoint 也赋予了日志系统删除陈旧的日志的能力，
     用来节约磁盘空间（checkpoint 前的字节数据理论上都可以删除）。
 
+7、Metadata-元数据
+
+    Master存储三类最重要的metadata数据：1、File、chunk、namespace；2、file到chunk的映射Map；3、每一个chunk replica的存储位置。
+    所有的元数据都保存在主服务器的内存中。
+
+    前两种类型(名称空间和文件到块的映射)数据同时也会通过 logging metuations 存储到主机本地磁盘上、复制到远程机器上来持久化。使用日志允许
+    我们简单、可靠地更新 Master 的状态，并且不会在主崩溃时出现不一致的风险。另一方面，Master 并不会持久化 chunk replica 的位置信息。其
+    通过启动时以及 chunkserver 加入集群时发起 chunkserver 的每个 chunk 数据块位置的询问。
+
+    内存内的数据结构
+
+    元数据保存在 Master 的内存中使得 Master 要对元数据做出变更变得极为容易；同时，这也使得 Master 能够更加高效地周期扫描集群的元数据，这
+    扫描主要用户实现垃圾收集、出现 chunkserver 时重新创建其一个副本以及 chunkserver 之间的负载平衡。
+    
+    唯一的不足在于这使得整个集群所能拥有的 Chunk 数量受限于 Master 的内存大小，不过这是一个小问题，因为对于一个 64MB 大小的 Chunk，Master
+    只需要维持不到 64 字节的元数据（虽然前者数据存储在磁盘上，后者数据存储在内存中）。
+    
+    如果需要支持更大的文件系统，通过给 Master 节点内存扩容代价是不大的，但是这个不大的代价可以带来在内存中存储元数据所获得的简单性、可靠性、性
+    能和灵活性。
+    
+8、Chunk Locations：
+    
+    Master 服务器不持久化 chunkservers 拥有哪个 chunk 副本的持久记录，而是通过询问实现：
+    Master 在启动时通过轮询获取每一个 chunkserver 上所有 chunk replica 的初始值；
+    Master 在启动后通过心跳机制来检测每一个 chunkserver 上所有 chunk replica 的变化，以保证其拥有最新的数据。
+
+9、Operation Log
+
+    Operation Log 包含关键metadata 数据更改的历史记录，它是数据库的核心，它不仅是元数据的唯一持久记录，还充当定义并发操作顺序的逻辑时间线、
+    文件和块，以及它们的版本都是唯一的，永远由它们创建的逻辑时间来标识。
+
+    由于 Operation Log 日志非常重要，所以我们必须可靠地存储它，并且在元数据的更改被持久化之前，不能使更改对客户端可见。否则，即使块本身存活
+    下来，我们也会丢失整个文件系统或最近的客户端操作。因此，我们将它复制到多个远程机器上，只有在本地和远程将相应的日志记录刷新到磁盘之后才响应
+    客户机操作。在刷新之前，Master 批处理多个日志记录，从而减少刷新和复制对总体系统吞吐量的影响。
+
+    Master 通过重播操作日志恢复其文件系统状态。为了最小化启动时间，我们必须保持日志较小。每当日志增长超过一定的大小时，Master 检查其状态，
+    以便通过从本地磁盘加载最新的 checkpoint 并在此之后仅重放有限数量的日志记录来恢复。checkpoint 是一种紧凑的类似 b 树的形式，可以直接
+    映射到内存中并用于名称空间查找，而无需进行额外的解析。这进一步加快了恢复并提高了可用性。
+    
+    `Master 恢复仅仅需要最新的完整检查点和后续日志文件`。旧的检查点和日志文件可以自由删除，但通常还是会保留了一些近期的日志，以防止意外。
+
+10、Consistency Model-一致性模型
+
+    Guarantees by GFS：
+
+    文件名 namespace 命名空间的变化（比如，文件的创建）全权由 Master 节点在内存中进行管理，这个过程通过 namespace lock 确保操作的原
+    子性以及并发正确性，Mater 节点的 operation log 定义了这些操作在系统中的全局顺序；
+    
+    在数据修改后，文件区域的状态取决于很多个条件，比如修改类型、修改的成功与否、是否存在并发修改，下表总结了文件区域的状态（来自于论文）：
+![](https://spongecaptain.cool/images/img_paper/image-20200719211636393.png)
+
+    `GFS对file region状态的概念定义：`
+
+    consistent：所有的GFS Client将总是看到完全相同的数据。
+    
+    defined：当一个文件数据修改之后，如果file region还是保持 consistent状态，并且所有的client能够看到全部修改的内容。
+    
+    consistent but undefined：从定义上看，就是所有的Client能够看到相同的数据，但是并不能及时反映并发修改的任意修改。
+            这里通常是指写操作冲突了，GFS并不能保证多个客户端的并发写请求的执行顺序，但是保证最终数据的一致性，也就是说它的执行次序并不
+            能充分保证，但是最终所有的客户端查询时能读到相同的结果
+
+    inconsistent：因为处于inconsistent状态，因此一定也处于undefined状态，造成此状态的操作也被认为是failed的，不同的Client在读到的
+    数据不一致，同一个client在不同的时刻读取的文件数据也不一致
+   
+
+    表格将数据的修改分为两种情况：
+        1、write：修改File中原有数据，具体来说就是在指定文件的偏移地址下写入数据
+            GFS 没有为这类覆写操作提供完好的一致性保证：如果多个的 Client 并发地写入同一块文件区域，操作完成后这块区域的数据可能由各次
+            写入的数据碎片所组成，此时的状态最好也就是 consistant but undefined 状态
+        2、Record Append：即在原有File末尾Append（追加）数据，这种操作被GFS系统确保为原子操作，这是GFS系统最重要的优化之一。GFS 中
+           的 append 操作并不简单地在原文件的末尾对应的 offset 处开始写入数据（这是通常意义下的append操作），而是通过选择一个offset，
+           这一点在下面会详细说到。最后该被选择的 offset 会返回给 Client，代表此次 record 的起始数据偏移量。由于 GFS 对于 Record 
+           Append 采用的是 at least once 的消息通信模型，在绝对确保此次写操作成功的情况下，可能造成在重复写数据。
+        
+    在一系列成功的修改操作以后，被修改的文件区域的状态是 defined 并包含最后一次修改的写内容。GFS 通过以下两种方式实现这一目标：
+    在所有写操作相关的 replicas 上以同一顺序采用给 chunk 进行修改；
+    使用 chunk version numbers（也就是版本号）去检测 replicas 上的数据是否已经 stale（过时），这种情况可能是由于 
+    chunkserver 出现暂时的宕机(down)；
+        一旦一个 replicas 被判定为过时，那么 GFS 就不会基于此 replicas 进行任何修改操作，客户机再向 Master 节点请求元数据时，
+        也会自动滤除过时的 replicas。并且 Master 通常会及时地对过时的 replicas 进行 garbage collected（垃圾回收）。
+    
+    Q：
+        缓存未过期时 replica 出现过时的问题：因为在客户机存在缓存 cache 的缘故，在缓存被刷新之前，客户机还是有机会从stale replica上
+        读取文件数据。这个时间穿窗口取决于缓存的超时时间设置以及下一次打开同一文件的限制。另一方面，GFS 中的大多数文件都是 append-only，
+        因此 stale replica 上的读仅仅是返回一个 premature end of chunk，也就是说仅仅没有包含最新的追加内容的 chunk，而不是被覆写
+        了的数据（因为无法覆写），这样造成的影响也不会很大。
+
+        组件故障问题：Master 节点进行通过与所有 chunkserver 进行 regular handshake（定期握手）来检测出现故障的 chunkserver，
+        通过 checksumming（校验和）来检测数据是否损坏。一旦出现问题，GFS 会尽快地从有效的 replicas 上进行数据恢复，除非在 Master
+        节点检测到故障之前，存储相同内容的 3 块 replica 都出现故障时才会导致不可逆的数据丢失。不过即使是这样，GFS 系统也不会不可用，
+        而是会及实地给客户端回应数据出错的响应，而不是返回出错的数据。
+
+11、Implications for Applications
+
+    1、尽量选择append追加，而不是overwrite覆写，这是因为GFS仅仅保证append操作的一致性，但是覆写操作没有一致性保证
+    2、写入数据时使用额外的校验信息，比如校验和（或者其他hash技术）
+    3、为了避免write at least once而造成的重复数据，可以通过加入额外的唯一标识符来达到效果
+
+---
+##  系统内部的交互
+
+    尽可能减少Master节点的负载
+
+1、Leases and Mutation Order-租赁和修改顺序
+
+    修改操作包括追加和覆写，这两种写操作都会最终作用于所有的 replica（通常意义上说就是一个写指令对应于 3 个 chunk+replica 的 I/O 写）。
+    对于 chunk 的写操作涉及两种修改：
+
+    在相关 chunkserver 上进行 I/O 写操作；
+    在 Master 节点上修改 metadata；
+
+    Leases的含义是租赁，其用于Master确保多个节点之间写操作顺序的一致性，具体操作如下：
+    1、Client 向Master请求本次写操作涉及到的chunk name，通过chunk header 拿到chunk location返回给Client；
+    2、Client找到其中一个距离最近的chunk作为primary节点，其他的同种数据的replicas则是secondaries（从属节点），Master 在此消息中还会
+        告知被选中的 primary 节点来自客户端的多个写操作请求；
+    3、chunkserver收到lease以及写操作请求后，其才认为自己有权限进行写操作，并决定多个写操作的执行顺序，顺序被称为 serial order（串行执行顺序）
+        更改本地数据后，同步传递给secondaries节点；
+    4、当 primary 决定好顺序后，会将带有执行顺序的 lease 返回给 master 节点，master 节点随后会负责将顺序分发给其他两个 replica。其他两个
+        replicas 并没有选择权，只能按照 primary 决定的顺序进行执行。
+
+    这种 Lease 机制减少了 Master 的管理开销，同时也确保了线程安全性，因为执行顺序不再由 Master 去决定，而是由拥有具体 lease 租赁的
+    chunkserver 节点决定。租赁的默认占用超时时间为 60s，但是如果 Master 又接收到对同一个 chunk 的写操作，那么可以延长当前 primary
+    节点的剩余租赁时间。
+
+    流程如下：
+
+![](https://spongecaptain.cool/images/img_paper/image-20200720205146260.png)
+
+![](./photo/070301.png)
