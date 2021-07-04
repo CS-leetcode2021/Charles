@@ -293,3 +293,193 @@
 ![](https://spongecaptain.cool/images/img_paper/image-20200720205146260.png)
 
 ![](./photo/070301.png)
+
+
+2、Data Flow-数据流
+
+    Data Flow传输模型的两个关键字：linearly、pipeline。
+    关于数据流：GFS的目标是将数据流和控制流进行解藕，解藕的方式就是以线性的方式进行传输数据。具体来说就是Client给primary传递数据，而primary给
+    replica传递数据，而下一个 replica 又负责给下下一个 replica 传输数据。这种方式能充分利用每台机器的网络带宽，避免网络瓶颈和高延迟链接，并最
+    小化通过所有数据的延迟。
+
+    具体来说，避免 network bottlenecks 与 high-latency links 的线型链路采用了如下做法：每一个节点都会将数据转发给最近且还没有收到数据的节
+    点，节点通过 IP 地址来估算两个节点之间的链路距离。
+
+    Data Flow 为了最小化延迟，还采用管道传输模型管道传输模型可以用生活中自来水管道来解释，水经过一个节点之后就会去下一个节点，在计算机中水就是字
+    节。当一个 chunkserver 接收到一些数据后（不是一个字节就会触发，而是要有一定阈值）就会立即转发给下一个节点，而不是等到此次写操作的所有数据接
+    收完毕，才开始向下一个节点转发。值得一提的是，GFS 系统使用的是全双工网络，即发送数据时不会降低数据接收速率。
+
+3、Atomic Record Appends-原子的记录追加
+
+    GFS 提供了原子的 Record Append（文件追加）操作。 在传统的写操纵中，客户端需要指定写入数据的地址偏移量，但是对同一地址的并发写操作并不能保证
+    是序列化发生的，因此某一个文件区域可能包含来自多个客户端写操作的碎片。但是在 GFS 中的 Record Append 中，客户端仅仅负责指定要写的数据，GFS
+    以 at least once 的原子操作进行写，写操作的相关数据一定是作为连续的字节序列存放在 GFS 选择的偏移量处。
+
+
+    具体来说：record append 是指向已经存储的文件的末尾追加数据，因此客户端并不需要像读操作那样提供一个数据范围，因为 record append 操作总是
+    在文件末尾追加数据，这个地址偏移量应当交给 chunksever 来确定。
+
+    3.1、`GFS record append 操作的内部执行逻辑如下：`
+    
+        1、Client 确定 file name 以及要写入的 byte data（形式上可以选择一个 buffer 来存储要写入的字节数据）；
+        2、Client 向 Master 发出期望进行 record 操作的请求，并附带上 file name，但是不用携带字节数据；
+        3、Master 接收到请求之后得知是一个 append record 请求，并且得到 file name。Master 节点通过其内存中的 metadata 得到当前 file 分块存储
+            的最后一个 chunk 的 chunk handle 以及 chunk 所在的所有 chunkserver；
+        4、Master 之后将这些信息转发给 Client；
+        …下面的操作就类似于 1 小节中的过程。
+
+    
+    3.2、`Record append操作涉及primary的选择步骤：`
+
+        1、Master 节点在接受到修改请求时，会找此 file 文件最后一个 chunk 的 up-to-date 版本（最新版本），最新版本号应当等于 Master 节点的版本号；
+            什么叫最新版本。chunk 使用一个 chunk version 进行版本管理（分布式环境下普遍使用版本号进行管理，比如 Lamport 逻辑时钟）。
+            一个修改涉及 3 个 chunk 的修改，如果某一个 chunk 因为网络原因没能够修改成功，那么其 chunk version 就会落后于其他两个 chunk，
+            此 chunk 会被认为是过时的。
+        2、Master 在选择好 primary 节点后递增当前 chunk 的 chunk version，并通过 Master 的持久化机制持久化；
+        3、通过 Primary 与其他 chunkserver，发送修改此 chunk 的版本号的通知，而节点接收到次通知后会修改版本号，然后持久化；
+        4、Primary 然后开始选择 file 最后一个文件的 chunk 的末尾 offset 开始写入数据，写入后将此消息转发给其他 chunkserver，它们也对相同
+            的 chunk 在 offset 处写入数据；
+
+    3.3、`问题：`
+        1、如果向file追加的数据超过了chunk剩余的容量怎么办？
+            首先，这是一个经常发生的问题，因为 record append 操作实际上能一次添加的数据大小是被限制的，大小为 chunksize（64 MB）的 1/4，
+            因此在大多数常见下，向 chunk append 数据并不会超出 64 MB 大小的限制；
+            其次，如果真的发生了这个问题，那么 Primary 节点还是会向该 chunk append 数据，直到达到 64MB 大小上限，然后通知其他两个replicas
+            执行相同的操作。最后响应客户端，告知客户端创建新 chunk 再继续填充，因为数据实际上没有完全消耗掉；
+
+        2、Record Append 作为 GFS 中写操作的一种类型，自然准许遵循 3.1 小节中的数据流机制；
+
+        3、At least once 机制引发的问题：
+
+![](./photo/070401.png)
+
+4、Read操作
+
+    1、Client —> Master 请求：file name + range(或者说是 offset，总之是客户端打算读取的字节范围)；
+    2、Master —-> Client 响应：chunk handle + a list of server
+    3、这一步 Client 在本地存在缓存，它在缓存失效之前读取同一个 chunk 的数据并不需要向 Master 重新发出索要对应 metadata 数据的请求，而是直
+        接使用缓存，即直接向 chunkserver 进行交互数据；
+    4、client 在 a list of server 中跳出一个 chunkserver，GFS 论文指出，通过 chunkserver 的 IP 地址，能够 guess 出距离当前 client
+        最近的 chunksver，然后 Client 会优先向最近的 chunkserver 请求数据读取；
+    5、chunkserver 收到数据读取请求后，根据 clinet 发来的 chunk hanle 进行磁盘 I/O 最终返回数据给 client；
+
+    问题：
+
+![](./photo/070402.png)
+
+5、Snapshot快照
+
+![](./photo/070403.png)
+
+---
+## MASTER OPERATION-主节点操作
+
+    Master 节点负责的工作有：
+        所有 namespace 的管理工作；
+        管理整个系统中的所有 chunk replicas：
+        做出将 chunk 实际存储在哪里的决定；
+        创建新的 chunk 和 replica；
+        协调系统的各种操作（比如读、写、快照等），用于保证 chunk 正确且有效地进行备份；
+        管理 chunkserver 之间的负载均衡；
+        回收没有被收用的存储空间；
+1、namespace management and locking-命名空间管理和锁机制
+    
+    Master 节点有很多操作都需要执行很长时间，比如：snapshot 操作必须向 chunkserver 撤回 snapshot 涉及的所有 chunk 的 lease。我们并不希望
+    这些耗时的操作会影响 Master 节点的其他操作。出于这个目的，我们给 namespace 上锁来实现可以同时进行多个操作以及确保操作的正确串行执行顺序。
+
+    不同于其他传统的文件系统，GFS 并没有为每一个目录创建一个用于记录当前目录拥有哪些文件的数据结构，也不支持文件和目录的别名。GFS 逻辑上将其
+    namesapace 当做一个查询表，用于将 full pathname（要么是一个 absolute file name，要么是一个 absolute directory name） 映射为
+    metadata。如果使用 prefix compression（前缀压缩），那么这个表可以在内存中被高效地表示。在 namespace 树中的每一个节点对应一个 full
+    pathname，都拥有一个与之相关联的 read-write lock(读写锁)。
+
+![](./photo/070404.png)
+
+2、Replica Placement - 确定 Replica 的存放位置
+
+    GFS 系统是一个分布式系统，一个 GFS 集群通常会有成百上千个 chunkserver，它们分布在很多 machine rack（机架上）。每一个 chunkserver 
+    同一可以被成百上千个其他位于同一（或不同）的机架上的 chunkserver 访问。在两个不同机架上进行通信的 chunkserver 需要通过交换机。此外，机架
+    的输入输出带宽可能小于机架内所有 chunkserver 的总带宽。这些多级分布对数据的可伸缩性、可靠性和可用性提出了挑战。
+
+    chunk replica placement policy 有两个目的：
+    
+    最大化数据 reliability（可靠性）和 availability（可用性）；
+    最大化 network bandwidth utilization（网络带宽利用率）；
+    为了达到上述目的，在 chunkserver 和 chunkserver 之间传播 replicas 是不够的，这仅仅能够在机器或磁盘故障时保障可靠性和可用性，且会给单个
+    rack 机架带来带宽使用上的压力，因为读取数据时，无论客户端最终选择哪一个 replicas，最终都是消耗着同一个 replicas 的带宽。我们还需要在不同的
+    racks(机架) 上传输 chunk replicas，这能够在一整个机架故障时都能够确保可靠性和可用性。另一方面，由于 chunk replicas 分布存储在不同机架
+    上的 chunkserver 上，因此降低了每一个 rack 提供 replicas 读写时的带宽压力，因为相同于多个机架平均了带宽压力。
+
+3、Creation, Re-replication, Rebalancing-创建 重放置 均衡再建
+
+    chunk replicas 出于三个原因被创建：
+
+    chunk reation；
+    Re-replication；
+    reblancing；
+    当 Master 节点创建了一个 chunk，它负责确定将这个 initially empty replicas 放置到哪里，它鉴于以下几个因素进行判断：
+    
+    默认情况下一个 Master 创建一个 chunk 对应 chunkserver 上创建 3 个 replica。
+    
+    选择将 replica 放置于磁盘空间利用率低于平均水平的 chunkserver，这样一来能够保持所有 chunkserver 在磁盘利用率上保持一致性；
+    限制每一个 chunkserver 上最近创建的 chunk 的个数，虽然仅仅创建一个 chunk 代价不高，但是它通常是即将出现大量写操作的前兆，因为 chunk 通
+    常是在写操作时被创建。
+    正如 4.2 节所谈到的，我们期望将 replicas of chunk 分散放置在不同的 rack 上。
+    另一方面，一旦可用的 replicas 数量下降到用户预设值（默认为 3），那么 Master 就会开始 re-replicate chunk 操作。这可能由于如下的原因造成：
+    
+    chunkserver unavailable（不可用），比如它给 Master 发送如下状态信息：它的 replica 崩溃了、某一个磁盘不可读。
+    程序员修改了配置，动态增加了 replication 的个数的要求；
+    当 chunk 需要被 re-replicated 时，Master 通过以下因素来确定执行优先级：
+    
+    根据距离 replication goal 的配置的距离来确定优先级。比如默认三个 replicas，有一组 replicas 中有两个出现了不可用，而另一组仅仅只有一个
+    出现了不可用，因此前者比后有优先级高；
+    最近活动的文件（被读、被写）比最近删除的文件的 chunk 有更高的优先级；
+    如果 chunk 的读写可能阻塞客户端，那么该 chunk 将有较高的优先级，这能够减少 chunk 故障时对使用 GFS 的应用程序的影响；
+
+    Master 节点选择优先级最高的 chunk 先进行 clone（克隆），方式是通知相关 chunkserver 直接从存在可用 replica 的 chunkserver 上进行
+    chunk 数据的拷贝。
+
+    注意：为了防止因为过多的 clone 操作占用过多的系统带宽，Master 节点既会限制当 chunkserver 进行的 clone 数量，又会限制整个 GFS 集群同时
+    进行的 clone 操作数量。而且 chunkserver 自身也会对消耗在 clone 操作上的带宽占比，其方式是限制对复制源的请求数量。
+
+    另一方面，Master 的 rebalancing 机制是指：Master 节点会负责检查当前 replica 的分布，然后会将相关 replicas 移动到更好的磁盘位置。因此，
+    通过这个机制 Master 节点能将一个新加入的 chunkserver 自动地逐渐填充，而不是立即在其刚加入时用大量的写操作来填充它。新的 replicas 的放置
+    原理和上面两种类似。当然 Master 还要选择从哪一个 chunkserver 上删除相关 replicas，以便将其移动到磁盘空闲的 chunksever 上，这里就挑选磁
+    盘空闲水平低于平均值的 chunkserver。
+
+4、Garbage Collection
+
+![](./photo/070405.png)
+
+5、Stale Replica Detection-过期 replica 检测
+
+    当 chunkserver 故障了或者因为宕机没能够正确地实施写操作，那么 Chunk replicas 的状态就变为 stale。Master 节点为每一个 chunk 维护一个
+    chunk verison nember（chunk 版本号）来辨别哪些 chunk 是 up-to-date，哪些 chunk 是 stale。
+
+    当 Master 赋予一个 chunk 新的租赁时，其就会使 chunk version 自增，并将此版本号告知其他 replicas。
+    
+    这里也就是说 Master 节点、primary 节点的 chunk version 和其他 chunkserver 节点的 chunk 的 chunk version 会保持一致。
+    
+    版本号的通知优先于写操作执行前。如果其他 replica 此时不可用，那么这个 chunk version 的通知就无法到，因此其 chunk version 就不会增加。
+    那么当此 Chunkserver 重启后的心跳消息中就会包含此 chunk version 信息，Master 就能借此发现 ChunkServer 拥有 stale 的 replica。
+    如果 Master 发现高于自己记录的 chunk version number，那么 Master 会认为自己在授予 lease 时发生了错误，然后将高版本的 chunk version
+    number 视为最新版本。
+    
+    Master 节点在定时的垃圾收集任务中删除 stale replicas，当客户端对 stale chunk 请求时，Master 节点会发出此 chunk 不存在的响应。
+
+---
+## FAULT TOLERANCE AND DIAGNOSIS-容错和诊断
+
+    对于 GFS 系统设计的最大挑战是需要处理频繁的组件故障，组件的质量一般以及数量众多一起提高了挑战难度。我们总是不能完全信任主机与硬盘，组件的故障
+    可以引发很严重的问题，比如 GFS 系统不可用，甚至是错误的数据。下面，我们将讨论我们如何来解决这些挑战，如何在错误不可避免地发生时进行问题诊断。
+
+1、High Availability-高可用性
+    
+![](./photo/070406.png)
+
+2、Data Integrity-数据完整性
+
+![](./photo/070407.png)
+
+3、 Diagnostic Tools-诊断工具
+
+![](./photo/070408.png)
