@@ -3,6 +3,8 @@
 ---
 [连接1-google bigtable](https://spongecaptain.cool/post/paper/bigtable/)
 
+[连接2-SSTable具体的函数操作](https://leveldb-handbook.readthedocs.io/zh/latest/sstable.html#)
+
 ---
 ## 是什么？
 
@@ -155,6 +157,7 @@
 
         压缩类型
         CRC 校验码
+
 ![](./photo/070207.png)
 
     数据压缩：压缩类型说明了Block中存储的数据是否进行了数据压缩，若是，采用了那种算法进行压缩
@@ -190,6 +193,13 @@
     
     eg:
 ![](./photo/070211.png)
+
+    此外，第一个restart point为0（偏移量），第二个restart point为16,restart point共有两个，因此一个datablock
+    数据段的末尾添加了下图所示的数据：
+
+![](https://leveldb-handbook.readthedocs.io/zh/latest/_images/datablock_example_2.jpeg)
+
+    尾部数据记录了每一个restart point 的值，以及所有的restart point个数。
 
 4、filter block的数据结构：
     
@@ -240,7 +250,207 @@
     footer 大小固定，为 48 字节，用来存储 meta index block 与 index block 在 SSTable 中的索引信息，另外尾部还会存储一个 magic word，
     内容为：“http://code.google.com/p/leveldb/" 字符串 sha1 哈希的前 8 个字节。
 
-8、SSTable的IO方式-log structured-merge tree（算法）
+8、写操作
+
+    8.1、sstable的写操作通常发生在：
+
+        1、memory db将内容持久化到磁盘文件中时，会创建一个sstable进行写入
+        2、leveldb后台进行文件compaction时，会将若干个sstable文件内容重新组织，输出到若干个新的sstable中；
+
+    为sstable进行写操作的数据结构为tWriter，具体如下：
+```
+    // tWriter wraps the table writer. It keep track of file descriptor
+    // and added key range.
+    type tWriter struct {
+        t *tOps
+    
+        fd storage.FileDesc // 文件描述符
+        w  storage.Writer   // 文件系统writer
+        tw *table.Writer
+    
+        first, last []byte
+    }
+```
+    主要包括了一个sstable的文件描述符，底层文件系统的writer，该sstable中所有数据项最大最小的key值以及一个内嵌的tableWriter。
+
+    一次sstable的写入为一次不断利用迭代器读取需要写入的数据，并不断调用tableWriter的Append函数，直至所有有效数据读取完毕，为该
+    sstable文件附上元数据的过程。
+    该迭代器可以是一个内存数据库的迭代器，写入情景对应着上述的第一种情况；
+    该迭代器也可以是一个sstable文件的迭代器，写入情景对应着上述的第二种情况；
+
+    8.2、！！！tableWriter的Append函数是理解整个写入过程的关键
+
+        tableWriter struct：
+
+```
+    // Writer is a table writer.
+    type Writer struct {
+        writer io.Writer
+        // Options
+        blockSize   int // 默认是4KiB
+    
+        dataBlock   blockWriter // data块Writer
+        indexBlock  blockWriter // indexBlock块Writer
+        filterBlock filterWriter // filter块Writer
+        pendingBH   blockHandle
+        offset      uint64
+        nEntries    int // key-value键值对个数
+    }
+```
+    
+    其中blockWriter与filterWriter表示底层的两种不同的writer，blockWriter负责写入data数据的写入，而filterWriter负责写入过滤数据。
+
+    pendingBH记录了上一个dataBlock的索引信息，当下一个dataBlock的数据开始写入时，将该索引信息写入indexBlock中。
+
+    8.3、Append
+    
+        Append的主要逻辑：
+            1、若本次写入为新dataBlock的第一次写入，则将上一个dataBlock的索引信息写入；
+            2、将keyvalue数据写入datablock；
+            3、将过滤信息写入filterBlock；
+            4、若datablock中数据超过预订上限，则标志着本次datablock写入结束，将内容刷新到磁盘文件中；
+
+```
+    func (w *Writer) Append(key, value []byte) error {
+        w.flushPendingBH(key)
+        // Append key/value pair to the data block.
+        w.dataBlock.append(key, value)
+        // Add key to the filter block.
+        w.filterBlock.add(key)
+    
+        // Finish the data block if block size target reached.
+        if w.dataBlock.bytesLen() >= w.blockSize {
+            if err := w.finishBlock(); err != nil {
+                w.err = err
+                return w.err
+            }
+        }
+        w.nEntries++
+        return nil
+    }
+```
+    dataBlock.append
+        该函数将编码后的KV数据写入到dataBlock对应的buffer中，编码的格式如上稳重提到的数据项的格式，此外，在写入的过程中，若该数据项为restart
+        点，则会添加响应的restart point信息。
+
+    filterBlock.append
+        该函数将KV数据项的key值加入到过滤信息中。
+
+    finishBlock
+        若一个datablock中的数据超过了固定上限，则需要将相关数据写入到磁盘文件中。
+        
+        在写入时，需要做以下工作：
+
+        封装dataBlock，记录restart point的个数；
+        若dataBlock的数据需要进行压缩（例如snappy压缩算法），则对dataBlock中的数据进行压缩；
+        计算checksum；
+        封装dataBlock索引信息（offset，length）；
+        将datablock的buffer中的数据写入磁盘文件；
+        利用这段时间里维护的过滤信息生成过滤数据，放入filterBlock对用的buffer中；
+    
+    Close
+        当迭代器取出所有数据并完成写入后，调用tableWriter的Close函数完成最后的收尾工作：
+
+        若buffer中仍有未写入的数据，封装成一个datablock写入；
+        将filterBlock的内容写入磁盘文件；
+        将filterBlock的索引信息写入metaIndexBlock中，写入到磁盘文件；
+        写入indexBlock的数据；
+        写入footer数据；
+        至此为止，所有的数据已经被写入到一个sstable中了，由于一个sstable是作为一个memory db或者Compaction的结果原子性落地的，因此在
+        sstable写入完成之后，将进行更为复杂的leveldb的版本更新，
+
+9、读操作
+    
+    读操作是写操作的逆过程：
+        
+![](https://leveldb-handbook.readthedocs.io/zh/latest/_images/sstable_read_procedure.jpeg)
+
+    大致流程2为：
+    
+    1、首先判断“文件句柄”cache中是否有指定sstable文件的文件句柄，若存在，则直接使用cache中的句柄；否则打开该sstable文件，按规则读取该文件的
+        元数据，将新打开的句柄存储至cache中；
+    2、利用sstable中的index block进行快速的数据项位置定位，得到该数据项有可能存在的两个data block；
+    3、利用index block中的索引信息，首先打开第一个可能的data block；
+    4、利用filter block中的过滤信息，判断指定的数据项是否存在于该data block中，若存在，则创建一个迭代器对data block中的数据进行迭代遍历，
+        寻找数据项；若不存在，则结束该data block的查找；
+    5、若在第一个data block中找到了目标数据，则返回结果；若未查找成功，则打开第二个data block，重复步骤4；
+    6、若在第二个data block中找到了目标数据，则返回结果；若未查找成功，则返回Not Found错误信息；
+
+    缓存：
+        在levelDB中，使用cache来缓存两类数据：
+            1、sstable文件句柄及其元数据；
+            2、data block中的数据；
+
+    因此在打开文件之前，首先判断能够在cache中命中sstable的文件句柄，避免重复读取的开销
+
+    元数据的读取：
+
+![](https://leveldb-handbook.readthedocs.io/zh/latest/_images/sstable_metadata.jpeg)
+        
+    由于sstable负责的文件组织格式，因此在打开文件后，需要读取必要的元数据，才能访问sstable中的数据。
+    
+    元数据读取的过程可以分为以下几个步骤：
+        1、读取文件的最后48字节的利用，即footer数据；
+        2、读取footer数据中维护的两个数据项：（1）meta index block；（2）index block两个部分的的索引信息并记录；
+        3、利用meta index block的索引信息读取该部分的内容；
+        4、遍历meta index block，查看是否存在“有用”的filter block的索引信息，若有，则记录该索引信息；若没有，则表示当前sstable
+            中不存在任何过滤信息来提高效率。
+    
+
+    数据项的快速定位：
+        sstable中存在多个data block，倘若依次进行“遍历”，显然是不可取的，但是由于一个sstable钟所有的数据项都是按序排列的，因此可以
+        利用有序性已经index block中维护的索引信息快速定位目标数据项可能存在的data block。
+
+        一个index block的文件结构示意图如下：
+
+![](https://leveldb-handbook.readthedocs.io/zh/latest/_images/indexblock.jpeg)
+
+        index block是由一系列的键值对组成，每一个键值对表示一个data block的索引信息。
+
+        键值对的key为该data block中数据项key的最大值，value为该data block的索引信息（offset, length）。
+
+        因此若需要查找目标数据项，仅仅需要依次比较index block中的这些索引信息，倘若目标数据项的key大于某个data block中最大的key值，
+        则该data block中必然不存在目标数据项。故通过这个步骤的优化，可以直接确定目标数据项落在哪个data block的范围区间内。
+        
+        !!!值得注意的是，与data block一样，index block中的索引信息同样也进行了key值截取，即第二个索引信息的key并不是存储完整的key，
+        而是存储与前一个索引信息的key不共享的部分，区别在于data block中这种范围的划分粒度为16，而index block中为2 。
+
+        也就是说，index block连续两条索引信息会被作为一个最小的“比较单元“，在查找的过程中，若第一个索引信息的key小于目标数据项的key，
+        则紧接着会比较第三条索引信息的key。
+
+        这就导致最终目标数据项的范围区间为某”两个“data block。
+
+![](https://leveldb-handbook.readthedocs.io/zh/latest/_images/index_block_find.jpeg)
+
+        
+    过滤data block
+
+        若sstable存有每一个data block的过滤数据，则可以利用这些过滤数据对data block中的内容进行判断，“确定”目标数据是否存在于data block中。
+        
+        过滤的原理为：
+        
+        若过滤数据显示目标数据不存在于data block中，则目标数据一定不存在于data block中；
+        若过滤数据显示目标数据存在于data block中，则目标数据可能存在于data block中；
+        具体的原理可能参见《布隆过滤器》。
+        
+        因此利用过滤数据可以过滤掉部分data block，避免发生无谓的查找。
+
+    查找data block
+
+![](https://leveldb-handbook.readthedocs.io/zh/latest/_images/datablock_format.jpeg)
+
+        在data block中查找目标数据项是一个简单的迭代遍历过程。虽然data block中所有数据项都是按序排序的，但是作者并没有采用“二分查找”来提高查
+        找的效率，而是使用了更大的查找单元进行快速定位。
+
+        与index block的查找类似，data block中，以16条记录为一个查找单元，若entry 1的key小于目标数据项的key，则下一条比较的是entry 17。
+
+        因此查找的过程中，利用更大的查找单元快速定位目标数据项可能存在于哪个区间内，之后依次比较判断其是否存在与data block中。
+
+        可以看到，sstable很多文件格式设计（例如restart point， index block，filter block，max key）在查找的过程中，都极大地提升了整体
+        的查找效率。
+
+
+10、SSTable的IO方式-log structured-merge tree（算法）
 
 简介：
 
