@@ -181,4 +181,4 @@ map(String key, String value):
 ---
 ## MapReduce内部运行架构
 
-![](./photo/070409.png)
+![](../photo/070409.png)

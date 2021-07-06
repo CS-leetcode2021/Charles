@@ -12,7 +12,7 @@
 
     下图是基于GFS文件系统发展出来的文件系统分支：
 
-![](./photo/070221.png)
+![](../photo/070221.png)
 
 ---
 ## GFS介绍
@@ -35,7 +35,7 @@
     2.5、系统需要支持并发写，即支持数百台并发地追加数据到一个文件，操作的原子性和同步开销是主要的指标
     2.6、高持续带宽比低延迟更重要
 
-![](./photo/070222.png)
+![](../photo/070222.png)
 
 3、接口-为完全实现的POSIX
 
@@ -139,7 +139,7 @@
 
 6、Master节点在内存中的设计：
 
-![](./photo/070223.png)
+![](../photo/070223.png)
 
     Table1：基于Hashmap实现，根据filename进行快速的查找，O（1）
     Table2：基于B+树实现，因为可能涉及到大字节的数据，需要一次性返回多个chunk数据，同时也可能存在范围查找
@@ -292,7 +292,7 @@
 
 ![](https://spongecaptain.cool/images/img_paper/image-20200720205146260.png)
 
-![](./photo/070301.png)
+![](../photo/070301.png)
 
 
 2、Data Flow-数据流
@@ -351,7 +351,7 @@
 
         3、At least once 机制引发的问题：
 
-![](./photo/070401.png)
+![](../photo/070401.png)
 
 4、Read操作
 
@@ -365,11 +365,11 @@
 
     问题：
 
-![](./photo/070402.png)
+![](../photo/070402.png)
 
 5、Snapshot快照
 
-![](./photo/070403.png)
+![](../photo/070403.png)
 
 ---
 ## MASTER OPERATION-主节点操作
@@ -392,7 +392,7 @@
     metadata。如果使用 prefix compression（前缀压缩），那么这个表可以在内存中被高效地表示。在 namespace 树中的每一个节点对应一个 full
     pathname，都拥有一个与之相关联的 read-write lock(读写锁)。
 
-![](./photo/070404.png)
+![](../photo/070404.png)
 
 2、Replica Placement - 确定 Replica 的存放位置
 
@@ -448,7 +448,7 @@
 
 4、Garbage Collection
 
-![](./photo/070405.png)
+![](../photo/070405.png)
 
 5、Stale Replica Detection-过期 replica 检测
 
@@ -474,12 +474,12 @@
 
 1、High Availability-高可用性
     
-![](./photo/070406.png)
+![](../photo/070406.png)
 
 2、Data Integrity-数据完整性
 
-![](./photo/070407.png)
+![](../photo/070407.png)
 
 3、 Diagnostic Tools-诊断工具
 
-![](./photo/070408.png)
+![](../photo/070408.png)

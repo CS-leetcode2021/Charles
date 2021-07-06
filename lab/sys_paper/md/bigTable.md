@@ -36,7 +36,7 @@
     distributed：这个大的Map需要支持多个分区来实现分布式
     multidimensional sorted map：这个 Map 按照 Row Key 进行排序，这个 Key 是一个由 {Row Key, Column Key, Timestamp} 组成的多维结构
     Sparse：每一行列的组成并不是严格的结构，而是稀疏的，也就是说，行与行可以由不同的列组成：
-![](./photo/070201.png)
+![](../photo/070201.png)
     
     BigTable的每一个键值对key都为Row key + column key + Timestamp的结构，Value则是字符串
 
@@ -63,7 +63,7 @@
         3、依赖Chubby存储元数据和进行主服务器的选择
 
     Bigtable 主要由链接到每个客户端的库、主服务器和多个子表服务器组成：
-![](./photo/070202.png)
+![](../photo/070202.png)
 
 1、Chubby：
 
@@ -96,11 +96,11 @@
     包含了所有元数据子表的位置信息，元数据子表包含了一组用户子表的位置信息，在元数据的三级结构中，根子表不会被分割，用
     于确保子表的层次结构不超过三组。
     由于元数据大约存储1kb的内存数据，在容量限制为128MB内的元数据子表中，三层模型可以标记2^34个子表。
-![](./photo/070203.png)
+![](../photo/070203.png)
 
 6、元数据的三层结构：
 
-![](./photo/070204.png)
+![](../photo/070204.png)
     
     特点：
         6.1、拥有相同row key的键值对分别对应多个Tablet进行分布式存储（每个tablet大小是20MB）
@@ -121,7 +121,7 @@
     客户端定位子表服务器的时候：
         2.1、需要访问Chubby以获取根子表地址，然后浏览元数据表定位用户数据
         2.2、子表服务器会从GFS中获取数据，并将结果返回给客户端
-![](./photo/070205.png)
+![](../photo/070205.png)
 
     通常而言，为了加快数据访问以及数据的分块存储管理，存储系统通常会提供各种排序逻辑，在 Bigtable 中的排序逻辑主要有三种：
         3.1、利用 Row Key 进行排序，目的是横向化划分为多个 Tablet，避免形成超大块的数据，便于数据管理；
@@ -131,7 +131,7 @@
 ---
 ## 从LevelDB的实现来理解Bigtable的SSTable数据结构---LSM是一种分层的数据结构（其核心便是SSTable数据结构）
 
-![](./photo/070208.jpg)
+![](../photo/070208.jpg)
 
 1、含义：
 
@@ -142,7 +142,7 @@
 2、LevelDB对SSTable的具体实现：
 
     论文中并没有给出SSTable的具体结构，不过可以通过levelDB学习
-![](./photo/070206.png)
+![](../photo/070206.png)
     
     各个分块的主要作用：
     data block ：用来存储kv键值对
@@ -158,13 +158,13 @@
         压缩类型
         CRC 校验码
 
-![](./photo/070207.png)
+![](../photo/070207.png)
 
     数据压缩：压缩类型说明了Block中存储的数据是否进行了数据压缩，若是，采用了那种算法进行压缩
     校验码：CRC校验码是循环冗余校验校验码，校验范围包括数据和压缩类型
 
     单独将Data列拿出来，逻辑按照以下划分：
-![](./photo/070209.png)
+![](../photo/070209.png)
 
     第一部分的Entry*用来存储key-value数据，由于SSTable中所有的key-value都是严格按序存储的，
     用了节省存储空间，levelDB并不会为每一对key-value对都存储完整的key值，而是存储与上一个key
@@ -182,7 +182,7 @@
     该思想有点类似于跳表中利用高层数据迅速定位，底层数据详细查找的理念，降低查找的复杂度。
 
     每一个Entry的数据结构如下所示：
-![](./photo/070210.png)
+![](../photo/070210.png)
     
     一共分为5部分：
     1、shared key length：与前一条记录key共享部分长度；
@@ -192,7 +192,7 @@
     5、value：value的内容
     
     eg:
-![](./photo/070211.png)
+![](../photo/070211.png)
 
     此外，第一个restart point为0（偏移量），第二个restart point为16,restart point共有两个，因此一个datablock
     数据段的末尾添加了下图所示的数据：
@@ -210,7 +210,7 @@
     filter block 存储的是data block数据的一些过滤信息，这些过滤数据一般指代布隆过滤器的数据，用于加
     快查询的速度。
 
-![](./photo/070212.png)
+![](../photo/070212.png)
 
     filter block 存储的数据主要分为两部分：
         1、过滤数据
@@ -243,7 +243,7 @@
         6.1、data block i中最大的key
         6.2、该data block起始地址在sstable中的偏移量
         6.3、该data block的大小
-![](./photo/070213.png)
+![](../photo/070213.png)
 
 7、footer数据结构
 
@@ -454,30 +454,30 @@
 
 简介：
 
-![](./photo/070214.png)
+![](../photo/070214.png)
 
 读写矛盾、以及日志系统的优化：
 
-![](./photo/070215.png)
+![](../photo/070215.png)
 
 操作：
 
-![](./photo/070216.png)
+![](../photo/070216.png)
 
 合并的逻辑：
 
-![](./photo/070217.png)
+![](../photo/070217.png)
 
 数据结构的对比：
 
-![](./photo/070218.png)
+![](../photo/070218.png)
 
 ---
 ## Bigtable的得与失
 
-![](./photo/070219.png)
+![](../photo/070219.png)
 
 趋势：计算与存储分离
 
-![](./photo/070220.png)
+![](../photo/070220.png)
 
