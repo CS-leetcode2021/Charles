@@ -69,20 +69,20 @@ func levelOrder2(root *TreeNode) [][]int {
 
 
 // DFS
-var res [][]int
-
-func levelOrder3(root *TreeNode) [][]int {
-	res = [][]int{}
-	dfs(root, 0)
-	return res
-}
-func dfs(root *TreeNode, level int) {
-	if root != nil {
-		if level == len(res) {
-			res = append(res, []int{})
-		}
-		res[level] = append(res[level], root.Val)
-		dfs(root.Left, level+1)
-		dfs(root.Right, level+1)
-	}
-}
+//var res [][]int
+//
+//func levelOrder3(root *TreeNode) [][]int {
+//	res = [][]int{}
+//	dfs(root, 0)
+//	return res
+//}
+//func dfs(root *TreeNode, level int) {
+//	if root != nil {
+//		if level == len(res) {
+//			res = append(res, []int{})
+//		}
+//		res[level] = append(res[level], root.Val)
+//		dfs(root.Left, level+1)
+//		dfs(root.Right, level+1)
+//	}
+//}
