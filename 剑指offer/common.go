@@ -12,6 +12,33 @@ type ListNode struct {
 	Next *ListNode
 }
 
+func (ln *ListNode) EnList(node *ListNode) {
+	tmp := ln
+	for tmp.Next != nil {
+		tmp = tmp.Next
+	}
+
+	tmp.Next = node
+	node.Next = nil
+	return
+}
+
+func (ln *ListNode) DeList(val int) *ListNode {
+	p := ln
+	q := p.Next
+	for q.Next != nil {
+		if q.Val == val {
+			break
+		}
+		p = q
+		q = q.Next
+	}
+
+	p.Next = q.Next
+
+	return q
+}
+
 type TreeNode struct {
 	Val int
 	Left *TreeNode
