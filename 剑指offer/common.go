@@ -133,3 +133,38 @@ func (qn *QueueNode) DeQueue() *Node {
 	qn.queue= qn.queue[1:]
 	return n
 }
+
+type SStack struct {
+	Stack []int
+}
+
+func (s *SStack) Size() int {
+	return len(s.Stack)
+}
+
+func (s *SStack) Push(x int) {
+	if s.Size() == 0 {
+		s.Stack = make([]int,0)
+	}
+
+	s.Stack = append(s.Stack,x)
+
+}
+
+func (s *SStack) Pop() int {
+	if s.Size() <= 0 {
+		return -1
+	}
+
+	tmp := s.Stack[s.Size()-1]
+	s.Stack = s.Stack[0:s.Size()-1]
+	return tmp
+}
+
+func (s *SStack) Top() int {
+	if s.Size() <= 0 {
+		return -1
+	}
+
+	return s.Stack[s.Size()-1]
+}
