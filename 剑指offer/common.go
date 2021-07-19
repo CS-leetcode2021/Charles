@@ -8,7 +8,7 @@ package main
  */
 
 type ListNode struct {
-	Val int
+	Val  int
 	Next *ListNode
 }
 
@@ -40,8 +40,8 @@ func (ln *ListNode) DeList(val int) *ListNode {
 }
 
 type TreeNode struct {
-	Val int
-	Left *TreeNode
+	Val   int
+	Left  *TreeNode
 	Right *TreeNode
 }
 
@@ -53,11 +53,11 @@ func (q *Queue) Size() int {
 	return len(q.queue)
 }
 
-func (q *Queue) EnQueue(v *TreeNode)  {
+func (q *Queue) EnQueue(v *TreeNode) {
 	if q.Size() == 0 {
-		q.queue = make([]*TreeNode,0)
+		q.queue = make([]*TreeNode, 0)
 	}
-	q.queue = append(q.queue,v)
+	q.queue = append(q.queue, v)
 	return
 }
 
@@ -71,29 +71,74 @@ func (q *Queue) DeQueue() *TreeNode {
 	return v
 }
 
-type Node struct {
-	Val int
-	Children []*Node
+type StackTree struct {
+	stack []*TreeNode
+}
+
+func (s *StackTree) Size() int {
+	return len(s.stack)
+}
+
+func (s *StackTree) Push(v *TreeNode) {
+	if s.Size() == 0 {
+		s.stack = make([]*TreeNode, 0)
+	}
+
+	s.stack = append(s.stack, v)
+	return
+}
+
+func (s *StackTree) Pop() *TreeNode {
+	if s.Size() == 0 {
+		return nil
+	}
+
+	tmp := s.stack[s.Size()-1]
+	s.stack = s.stack[:s.Size()-1]
+	return tmp
+}
+
+func (s StackTree) Last() *TreeNode {
+	if s.Size() == 0 {
+		return nil
+	}
+	return s.stack[s.Size()-1]
+}
+
+func (s *StackTree) Sum () int {
+	if s.Size() == 0 {
+		return 0
+	}
+	sum := 0
+	for i := 0; i < s.Size(); i++ {
+		sum += s.stack[i].Val
+	}
+	return sum
+}
+
+type NodeN struct {
+	Val      int
+	Children []*NodeN
 }
 
 type Stack struct {
-	stack []*Node
+	stack []*NodeN
 }
 
 func (s *Stack) Size() int {
 	return len(s.stack)
 }
 
-func (s *Stack) EnStack(n *Node) {
+func (s *Stack) EnStack(n *NodeN) {
 	if s.Size() == 0 {
-		s.stack = make([]*Node,0)
+		s.stack = make([]*NodeN, 0)
 	}
 
-	s.stack = append(s.stack,n)
+	s.stack = append(s.stack, n)
 	return
 }
 
-func (s *Stack) DeStack() *Node {
+func (s *Stack) DeStack() *NodeN {
 	if s.Size() <= 0 {
 		return nil
 	}
@@ -104,10 +149,9 @@ func (s *Stack) DeStack() *Node {
 	return node
 }
 
-func (s *Stack) Last() *Node {
+func (s *Stack) Last() *NodeN {
 	return s.stack[s.Size()-1]
 }
-
 
 type QueueNode struct {
 	queue []*Node
@@ -119,9 +163,9 @@ func (qn *QueueNode) Size() int {
 
 func (qn *QueueNode) EnQueue(n *Node) {
 	if qn.Size() == 0 {
-		qn.queue = make([]*Node,0)
+		qn.queue = make([]*Node, 0)
 	}
-	qn.queue = append(qn.queue,n)
+	qn.queue = append(qn.queue, n)
 	return
 }
 
@@ -130,7 +174,7 @@ func (qn *QueueNode) DeQueue() *Node {
 		return nil
 	}
 	n := qn.queue[0]
-	qn.queue= qn.queue[1:]
+	qn.queue = qn.queue[1:]
 	return n
 }
 
@@ -144,10 +188,10 @@ func (s *SStack) Size() int {
 
 func (s *SStack) Push(x int) {
 	if s.Size() == 0 {
-		s.Stack = make([]int,0)
+		s.Stack = make([]int, 0)
 	}
 
-	s.Stack = append(s.Stack,x)
+	s.Stack = append(s.Stack, x)
 
 }
 
@@ -157,7 +201,7 @@ func (s *SStack) Pop() int {
 	}
 
 	tmp := s.Stack[s.Size()-1]
-	s.Stack = s.Stack[0:s.Size()-1]
+	s.Stack = s.Stack[0 : s.Size()-1]
 	return tmp
 }
 
