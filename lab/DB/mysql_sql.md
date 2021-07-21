@@ -75,3 +75,12 @@
 -   使用索引下推
 
 ![](https://mmbiz.qpic.cn/mmbiz_png/gjnldtnoHOpMWPWMOySlK82E56xRLtzUiaeXk4HvmA2atic6QNzcL2uxaUBVTswrkEfyPOjwoQlbYhjSsicqDh1UA/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+
+
+-   流程图
+
+![](https://img2020.cnblogs.com/blog/2012006/202012/2012006-20201203220240808-1368483593.png)
+
+-   SQL的执行顺序
+
+![](https://img2020.cnblogs.com/blog/2012006/202101/2012006-20210114202416943-1713966410.png)
