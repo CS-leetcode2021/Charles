@@ -4,7 +4,7 @@ import "sort"
 
 /**
  *  @ClassName:435_eraseOverlapIntervals
- *  @Description:mid
+ *  @Description:mid		// 区间不重叠问题
  *  @Author:jackey
  *  @Create:2021/7/22 上午10:18
  */
