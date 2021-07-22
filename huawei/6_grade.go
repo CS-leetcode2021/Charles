@@ -27,6 +27,7 @@ func main() {
 		}
 
 		var scores []int
+
 		for i := 0; i < n; i++ {
 			var x int
 			if _, err := fmt.Scan(&x); err != nil {
