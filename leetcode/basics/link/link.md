@@ -19,5 +19,5 @@
 -   问题2：求出入环点
 ![](https://pic.leetcode-cn.com/d3b2410ad20882b972f9722a5ec89e7573949c99763fb1aeb75001ebac0108c7-image.png)
     
-![](../../png/link.png)
+![](../../../png/link.png)
     

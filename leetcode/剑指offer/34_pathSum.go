@@ -1,7 +1,5 @@
 package main
 
-import "go/doc"
-
 /**
  *  @ClassName:34_pathSum
  *  @Description:剑指offer-34 二叉树中和为某一值的路径 同 leetcode-113
@@ -52,11 +50,11 @@ func pathSum3(root *TreeNode, sum int) [][]int {
 		return nil
 	}
 	var ret [][]int
-	dfs(root,sum,[]int{},&ret)
+	dfs1(root,sum,[]int{},&ret)
 	return ret
 }
 
-func dfs(root *TreeNode,sum int,arr []int,ret *[][]int){
+func dfs1(root *TreeNode,sum int,arr []int,ret *[][]int){
 	if root == nil{
 		return
 	}
@@ -71,8 +69,8 @@ func dfs(root *TreeNode,sum int,arr []int,ret *[][]int){
 		*ret = append(*ret,tmp)
 	}
 
-	dfs(root.Left,sum - root.Val,arr,ret)
-	dfs(root.Right,sum - root.Val,arr,ret)
+	dfs1(root.Left,sum - root.Val,arr,ret)
+	dfs1(root.Right,sum - root.Val,arr,ret)
 
 	arr = arr[:len(arr)-1]	// 回溯操作
 }
