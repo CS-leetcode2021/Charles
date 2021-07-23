@@ -15,11 +15,11 @@ func judgeSquareSum(c int) bool {
 	if c == 0 {
 		return true
 	}
-	for i, j := 0, int(math.Sqrt(float64(c))); i < j; {
+	for i, j := 0, int(math.Sqrt(float64(c))); i <= j; {
 		if i*i+j*j == c {
 			return true
 		} else if i*i+j*j < c {
-			i--
+			i++
 		} else {
 			j--
 		}
