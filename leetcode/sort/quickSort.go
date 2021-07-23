@@ -19,10 +19,10 @@ func partition1(arr []int, start, end int) int {
 	right := end
 
 	for left != right {
-		for left < right && pivot < arr[right] {
+		for left < end && pivot < arr[right] {
 			right--
 		}
-		for left < right && pivot > arr[left] {
+		for start < right && pivot > arr[left] {
 			left++
 		}
 
@@ -57,6 +57,7 @@ func quickSort(arr []int) []int {
 	return _quickSort(arr,0,len(arr)-1)
 }
 
+// 这里是二分
 func _quickSort(arr []int, left, right int) []int {
 	if left < right {
 		curMidIndex := partition(arr,left,right)
@@ -67,6 +68,7 @@ func _quickSort(arr []int, left, right int) []int {
 	return arr
 }
 
+// 这里进行单边比较
 func partition(arr []int, left, right int) int {
 	pivot := left
 	index := left + 1
