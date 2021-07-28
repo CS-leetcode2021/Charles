@@ -85,7 +85,7 @@
 
     改进：
 
-![](./photo/070501.png)
+![](photo/070501.png)
 
 
 3、跳表与其它的数据结构
@@ -115,4 +115,4 @@
 ---
 ## Java实现代码
 
-[代码](./skip_list/src/com/tmp/struct/Test.java)
+[代码](skip_list/src/com/tmp/struct/Test.java)

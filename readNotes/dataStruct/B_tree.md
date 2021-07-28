@@ -2,13 +2,13 @@
 
 ---
 
-![](./photo/070504.png)
+![](photo/070504.png)
 
 ![](https://spongecaptain.cool/images/img_mysql/image-20200710225502624.png)
 
-![](./photo/070505.png)
+![](photo/070505.png)
 
-![](./photo/070506.png)
+![](photo/070506.png)
 
 B 树的特点：
 
