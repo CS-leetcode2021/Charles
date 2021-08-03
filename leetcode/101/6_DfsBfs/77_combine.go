@@ -34,6 +34,7 @@ func backtracking77(Nums, path []int, level, k int, res *[][]int) {
 		path = append(path, Nums[i])
 		backtracking77(Nums, path, level+1, k, res)
 		path = path[:len(path)-1]
+		level++		// 避免重复选
 	}
 	return
 }
