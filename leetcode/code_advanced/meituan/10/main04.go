@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 /**
  *  @ClassName:main04
  *  @Description:dp问题
@@ -10,4 +12,5 @@ package main
 
 func main() {
 	dp := make([][][]int,0)
+	fmt.Println(dp)
 }
