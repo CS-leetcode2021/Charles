@@ -8,6 +8,20 @@ package _1_21
  */
 
 type ListNode struct {
-	Val int
+	Val  int
 	Next *ListNode
+}
+
+// 二叉树
+type Node struct {
+	Val   int
+	Left  *Node
+	Right *Node
+	Next  *Node
+}
+
+type TreeNode struct {
+	Val   int
+	Left  *TreeNode
+	Right *TreeNode
 }
