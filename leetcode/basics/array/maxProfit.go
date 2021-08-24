@@ -98,6 +98,7 @@ dp[-1][k][1] = dp[i][0][1] = -infinity
     dp[i][0] = max(dp[i-1][0],dp[i-1][1] + prices[i])
     dp[i][1] = max(dp[i-1][1],dp[i-1][0][0] - prices[i])
              = max(dp[i-1][1],0-prices[i])
+			// 只允许交易一次，因此今天的收益是负的
              = max(dp[i-1][1],-prices[i])
 
 base case:
